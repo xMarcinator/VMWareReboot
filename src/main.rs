@@ -3,6 +3,7 @@ use reqwest::{ClientBuilder, Error, header, Response};
 use reqwest::header::HeaderMap;
 
 use base64::prelude::*;
+use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
 
 struct VMWare {
@@ -67,8 +68,25 @@ impl VMWare {
             Err(_) => Err(())
         }
     }
+
+    async fn list_vms(&self) -> Result<Vec<VMSummary>,()>{
+        let url = self.baseAddress.clone() + "{}/api/vcenter/vm";
+
+        let res = match self.client.get(url).send().await {
+            Ok(resp) => {
+                resp
+            }
+            Err(_) => {}
+        };
+
+        match res.json().await {
+            Some(v) => Ok(v),
+            Err(_) => Err(())
+        }
+    }
 }
 
+#[Serialize,Deserialize]
 struct VMSummary{
     name: String,
     power_state: VmPowerState,
@@ -77,14 +95,39 @@ struct VMSummary{
     memory_size_mib:Option<i64>
 }
 
+#[Serialize,Deserialize]
+#[derive(Debug)]
 enum VmPowerState{
     POWERED_OFF,
     POWERED_ON,
     SUSPENDED
 }
 
+#[Serialize,Deserialize]
+#[derive(Debug)]
+enum VmPowerAction{
+    shutdown,
+    reboot,
+    standby
+}
+
 
 #[tokio::main]
-fn main() {
-    VMWare::connect(Ipv4Addr::LOCALHOST,"")
+async fn main() {
+    dotenv().ok();
+
+    let username = std::env::var("VCENTER_USERNAME").expect("VCENTER_USERNAME must be set.");
+    let password = std::env::var("VCENTER_PASSWORD").expect("VCENTER_PASSWORD must be set.");
+
+    let host = VMWare::connect(Ipv4Addr::LOCALHOST,&username,&password).await?;
+
+    host.list_vms().await.unwrap().iter().for_each(|vm|{
+        println!("vm {} is in state {:?}",vm.name,vm.power_state)
+
+        match vm.power_state {
+            VmPowerState::POWERED_OFF => {}
+            VmPowerState::POWERED_ON => {}
+            VmPowerState::SUSPENDED => {}
+        }
+    });
 }
